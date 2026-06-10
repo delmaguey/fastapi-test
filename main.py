@@ -1,18 +1,75 @@
-from fastapi import FastAPI
+import io
+import uuid
 
+from fastapi import FastAPI, UploadFile, File, HTTPException
+from openai import OpenAI
+from dotenv import load_dotenv
+from azure.identity import DefaultAzureCredential
+from azure.storage.blob import BlobServiceClient
+from azure.core.exceptions import ResourceNotFoundError
+import os
+
+load_dotenv()
 app = FastAPI()
 
-@app.get("/")
+credential = DefaultAzureCredential()
+client= OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+storage_account = os.environ["STORAGE_ACCOUNT"]
+
+@app.get("/health")
 def root():
-    return {"message": "Hello Daniel from FastAPI!"}
+    return {"message": "Service OK!"}
 
 
-@app.get("/age/{year}")
-def calculate_age(year:int):
 
-    age = 2026 - year
+account_url = f"https://{storage_account}.blob.core.windows.net"
 
-    return {
-        "birthYear": year,
-        "age": age
-    }
+credential = DefaultAzureCredential()
+blob_service_client = BlobServiceClient(account_url=account_url, credential=credential)
+
+
+# blob_service_client = BlobServiceClient(account_url=ACCOUNT_URL, credential=credential)
+
+# @app.post("/upload-audio")
+# async def upload_audio(file: UploadFile = File(...)):
+#     if file.content_type not in ["audio/mpeg", "audio/mp3"]:
+#         raise HTTPException(status_code=400, detail="Tipo de archivo no permitido")
+
+#     blob_name = f"{uuid.uuid4()}-{file.filename}"
+#     blob_client = blob_service_client.get_blob_client(container=CONTAINER_NAME, blob=blob_name)
+
+#     data = await file.read()
+#     blob_client.upload_blob(data, overwrite=True)
+
+#     return {
+#         "blob_name": blob_name,
+#         "url": f"{ACCOUNT_URL}/{CONTAINER_NAME}/{blob_name}"
+#     }
+
+
+@app.get("/transcribe/{fname}")
+def transcribe_audio(fname: str):
+    if not fname.lower().endswith(".mp3"):
+        raise HTTPException(status_code=400, detail="Only .mp3 files are allowed")
+
+    try:
+        blob_client = blob_service_client.get_blob_client(container="audios", blob=fname)
+
+        buffer = io.BytesIO()
+        downloader = blob_client.download_blob()
+        downloader.readinto(buffer)
+
+        buffer.seek(0)
+        buffer.name = fname
+
+        transcript = client.audio.transcriptions.create(
+            model="gpt-4o-transcribe",
+            file=buffer
+        )
+
+        return {"transcript": transcript.text}
+
+    except ResourceNotFoundError:
+        raise HTTPException(status_code=404, detail="Audio file not found")
+    except Exception as ex:
+        raise HTTPException(status_code=500, detail=f"Error: {str(ex)}")
