@@ -15,12 +15,7 @@ app = FastAPI()
 credential = DefaultAzureCredential()
 client= OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 storage_account = os.environ["STORAGE_ACCOUNT"]
-
-@app.get("/health")
-def root():
-    return {"message": "Service OK!"}
-
-
+container_name = os.environ["STORAGE_CONTAINER_NAME"]
 
 account_url = f"https://{storage_account}.blob.core.windows.net"
 
@@ -28,23 +23,28 @@ credential = DefaultAzureCredential()
 blob_service_client = BlobServiceClient(account_url=account_url, credential=credential)
 
 
-# blob_service_client = BlobServiceClient(account_url=ACCOUNT_URL, credential=credential)
+@app.get("/health")
+def root():
+    return {"message": "Service OK!"}
 
-# @app.post("/upload-audio")
-# async def upload_audio(file: UploadFile = File(...)):
-#     if file.content_type not in ["audio/mpeg", "audio/mp3"]:
-#         raise HTTPException(status_code=400, detail="Tipo de archivo no permitido")
 
-#     blob_name = f"{uuid.uuid4()}-{file.filename}"
-#     blob_client = blob_service_client.get_blob_client(container=CONTAINER_NAME, blob=blob_name)
 
-#     data = await file.read()
-#     blob_client.upload_blob(data, overwrite=True)
 
-#     return {
-#         "blob_name": blob_name,
-#         "url": f"{ACCOUNT_URL}/{CONTAINER_NAME}/{blob_name}"
-#     }
+@app.post("/upload-audio")
+async def upload_audio(file: UploadFile = File(...)):
+    if file.content_type not in ["audio/m4a", "audio/mp3"]:
+        raise HTTPException(status_code=400, detail="File type not supported. Please upload an .m4a or .mp3 file.")
+
+    blob_name = f"{uuid.uuid4()}-{file.filename}"
+    blob_client = blob_service_client.get_blob_client(container=container_name, blob=blob_name)
+
+    data = await file.read()
+    blob_client.upload_blob(data, overwrite=True)
+
+    return {
+        "blob_name": blob_name,
+        "url": f"{account_url}/{container_name}/{blob_name}"
+    }
 
 
 @app.get("/transcribe/{fname}")
