@@ -16,6 +16,7 @@ credential = DefaultAzureCredential()
 client= OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 storage_account = os.environ["STORAGE_ACCOUNT"]
 container_name = os.environ["STORAGE_CONTAINER_NAME"]
+model = os.environ["MODEL"]
 
 account_url = f"https://{storage_account}.blob.core.windows.net"
 
@@ -26,7 +27,6 @@ blob_service_client = BlobServiceClient(account_url=account_url, credential=cred
 @app.get("/health")
 def root():
     return {"message": "Service OK!"}
-
 
 
 
@@ -53,7 +53,7 @@ def transcribe_audio(fname: str):
         raise HTTPException(status_code=400, detail="Only .mp3 files are allowed")
 
     try:
-        blob_client = blob_service_client.get_blob_client(container="audios", blob=fname)
+        blob_client = blob_service_client.get_blob_client(container=container_name, blob=fname)
 
         buffer = io.BytesIO()
         downloader = blob_client.download_blob()
@@ -63,7 +63,7 @@ def transcribe_audio(fname: str):
         buffer.name = fname
 
         transcript = client.audio.transcriptions.create(
-            model="gpt-4o-transcribe",
+            model=model,
             file=buffer
         )
 
