@@ -1,4 +1,5 @@
 import io
+import json
 import uuid
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
@@ -8,6 +9,7 @@ from azure.identity import DefaultAzureCredential
 from azure.storage.blob import BlobServiceClient
 from azure.core.exceptions import ResourceNotFoundError
 import os
+import analyst_agent
 
 load_dotenv()
 app = FastAPI()
@@ -30,21 +32,21 @@ def root():
 
 
 
-@app.post("/upload-audio")
-async def upload_audio(file: UploadFile = File(...)):
-    if file.content_type not in ["audio/m4a", "audio/mp3"]:
-        raise HTTPException(status_code=400, detail="File type not supported. Please upload an .m4a or .mp3 file.")
+# @app.post("/upload-audio")
+# async def upload_audio(file: UploadFile = File(...)):
+#     if file.content_type not in ["audio/m4a", "audio/mp3"]:
+#         raise HTTPException(status_code=400, detail="File type not supported. Please upload an .m4a or .mp3 file.")
 
-    blob_name = f"{uuid.uuid4()}-{file.filename}"
-    blob_client = blob_service_client.get_blob_client(container=container_name, blob=blob_name)
+#     blob_name = f"{uuid.uuid4()}-{file.filename}"
+#     blob_client = blob_service_client.get_blob_client(container=container_name, blob=blob_name)
 
-    data = await file.read()
-    blob_client.upload_blob(data, overwrite=True)
+#     data = await file.read()
+#     blob_client.upload_blob(data, overwrite=True)
 
-    return {
-        "blob_name": blob_name,
-        "url": f"{account_url}/{container_name}/{blob_name}"
-    }
+#     return {
+#         "blob_name": blob_name,
+#         "url": f"{account_url}/{container_name}/{blob_name}"
+#     }
 
 
 @app.get("/transcribe/{fname}")
@@ -73,3 +75,16 @@ def transcribe_audio(fname: str):
         raise HTTPException(status_code=404, detail="Audio file not found")
     except Exception as ex:
         raise HTTPException(status_code=500, detail=f"Error: {str(ex)}")
+
+
+
+@app.post("/evaluate/strict", response_model=analyst_agent.EvaluationResult)
+async def evaluate_interview(request:analyst_agent.EvaluationRequest):
+
+    response_agent = await analyst_agent.evaluate_interview_strict(request)
+
+    try:
+        parsed = json.loads("")
+        return parsed
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail={"message": "Failed to parse Claude response as JSON", "raw_response": "raw_text"})
