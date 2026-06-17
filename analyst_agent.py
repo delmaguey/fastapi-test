@@ -152,7 +152,7 @@ Remember:
 
     payload = {
         "model": ANTHROPIC_MODEL,
-        "max_tokens": 2200,
+        "max_tokens": 64000,
         "system": SYSTEM_PROMPT,
         "messages": [
             {"role": "user", "content": user_prompt}
@@ -176,12 +176,16 @@ async def evaluate_interview_strict(request: EvaluationRequest):
     claude_response = await call_claude(request)
     raw_text = extract_text_content(claude_response)
 
+    cleaned_data = raw_text.strip()
+    if cleaned_data.startswith("json"):
+        cleaned_data = cleaned_data[4:].strip()
+
     try:
-        parsed = json.loads(raw_text)
+        parsed = json.loads(cleaned_data)
     except json.JSONDecodeError as ex:
         raise HTTPException(
             status_code=502,
-            detail={"message": "Claude did not return valid JSON", "raw_response": raw_text}
+            detail={"message": "Claude did not return valid JSON", "cleaned_data": cleaned_data}
         ) from ex
 
     try:
