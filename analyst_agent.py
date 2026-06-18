@@ -154,7 +154,7 @@ Remember:
     payload = {
         "model": ANTHROPIC_MODEL,
         "max_tokens": 8000,
-        "temperature": 0.2,
+        "temperature": 0,
         "system": SYSTEM_PROMPT,
         "messages": [
             {"role": "user", "content": user_prompt}
