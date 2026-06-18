@@ -155,7 +155,16 @@ Remember:
         "model": ANTHROPIC_MODEL,
         "max_tokens": 8000,
         "temperature": 0,
-        "system": SYSTEM_PROMPT,
+        "system": [
+            {
+                "type": "text",
+                "text": SYSTEM_PROMPT,
+                "cache_control": {
+                    "type": "ephemeral",
+                    "ttl": "5m"
+                }
+            }
+        ],
         "messages": [
             {"role": "user", "content": user_prompt}
         ]
