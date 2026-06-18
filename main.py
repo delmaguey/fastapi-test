@@ -9,7 +9,7 @@ from azure.identity import DefaultAzureCredential
 from azure.storage.blob import BlobServiceClient
 from azure.core.exceptions import ResourceNotFoundError
 import os
-import analyst_agent
+import analyst_agent, text_extractor
 
 load_dotenv()
 app = FastAPI()
@@ -88,3 +88,10 @@ async def evaluate_interview(request:analyst_agent.EvaluationRequest):
         return parsed
     except json.JSONDecodeError:
         raise HTTPException(status_code=500, detail={"message": "Failed to parse Claude response as JSON", "raw_response": "raw_text"})
+    
+
+
+@app.post("/upload-document/")
+async def upload_document(file: UploadFile = File(...)):
+    
+    return await text_extractor.upload_document(file)
