@@ -155,14 +155,11 @@ Remember:
         "model": ANTHROPIC_MODEL,
         "max_tokens": 8000,
         "temperature": 0,
+        "cache_control": { "type": "ephemeral" },
         "system": [
             {
                 "type": "text",
-                "text": SYSTEM_PROMPT,
-                "cache_control": {
-                    "type": "ephemeral",
-                    "ttl": "5m"
-                }
+                "text": SYSTEM_PROMPT
             }
         ],
         "messages": [
@@ -173,36 +170,24 @@ Remember:
     async with httpx.AsyncClient(timeout=90.0) as client:
         response = await client.post(ANTHROPIC_API_URL, headers=headers, json=payload)
 
+        
     if response.status_code >= 400:
         raise HTTPException(
             status_code=response.status_code,
             detail={"message": "Claude API request failed", "response": response.text}
         )
 
-    return response.json()
+    text = extract_clean_json_string(response.json())
+
+    return json.loads(text)
 
 
-#@app.post("/evaluate/strict", response_model=EvaluationResult)
-async def evaluate_interview_strict(request: EvaluationRequest):
-    claude_response = await call_claude(request)
-    raw_text = extract_text_content(claude_response)
+def extract_clean_json_string(text: json) -> str:
+    # Used to extract everything between the ```json and ``` blocks
+    content = text.get("content", [])
 
-    clean_json = re.sub(r'^```json\s*|```$', '', raw_text.strip(), flags=re.MULTILINE)
+    if content and content[0].get("type") == "text":
+        content_text = content[0].get("text")
 
-
-
-    try:
-        parsed = json.loads(clean_json)
-    except json.JSONDecodeError as ex:
-        raise HTTPException(
-            status_code=502,
-            detail={"message": "Claude did not return valid JSON", "raw_text": raw_text}
-        ) from ex
-
-    try:
-        return EvaluationResult.model_validate(parsed)
-    except Exception as ex:
-        raise HTTPException(
-            status_code=502,
-            detail={"message": "Claude returned unexpected schema", "raw_response": parsed}
-        ) from ex
+    match = re.search(r"```json\s*(.*?)\s*```", content_text, re.DOTALL)
+    return match.group(1) if match else content_text.strip()

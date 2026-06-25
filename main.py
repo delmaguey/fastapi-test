@@ -81,11 +81,10 @@ def transcribe_audio(fname: str):
 @app.post("/evaluate/strict", response_model=analyst_agent.EvaluationResult)
 async def evaluate_interview(request:analyst_agent.EvaluationRequest):
 
-    response_agent = await analyst_agent.evaluate_interview_strict(request)
+    response_agent = await analyst_agent.call_claude(request)
 
     try:
-        parsed = json.loads(response_agent)
-        return parsed
+        return response_agent
     except json.JSONDecodeError:
         raise HTTPException(status_code=500, detail={"message": "Failed to parse Claude response as JSON", "raw_response": "raw_text"})
     
