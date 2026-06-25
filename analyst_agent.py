@@ -36,11 +36,15 @@ Use the following evaluation rubric exactly as the source of truth:
 Instructions:
 1. Evaluate only from transcript evidence.
 2. Do not invent missing evidence.
-3. If evidence is weak or absent, explicitly say so and lower confidence.
-4. Penalize contradictions, vagueness, and unsupported claims.
-5. Prefer exact quotes when available.
-6. Return valid JSON only.
-7. Do not wrap the JSON in markdown fences.
+3. Never make assumptions about the candidate's skills or experience beyond what is in the transcript.
+4. Never frabricate evidence.
+5. Every score must be supported by at least one evidence item.
+6. If no evidence exists for a category, set score conservatively and explain why.
+7. If evidence is weak or absent, explicitly say so and lower confidence.
+8. Penalize contradictions, vagueness, and unsupported claims.
+9. Prefer exact quotes when available.
+10. Return valid JSON only.
+11. Do not wrap the JSON in markdown fences.
 
 Return this schema exactly:
 

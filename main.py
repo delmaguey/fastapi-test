@@ -55,6 +55,7 @@ def transcribe_audio(fname: str):
         raise HTTPException(status_code=400, detail="Only .mp3 files are allowed")
 
     try:
+
         blob_client = blob_service_client.get_blob_client(container=container_name, blob=fname)
 
         buffer = io.BytesIO()
