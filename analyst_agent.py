@@ -3,10 +3,12 @@ import re
 import json
 from pathlib import Path
 from typing import List, Optional, Literal, Any, Dict
-
+import logging
 import httpx
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Interview Transcript Evaluator")
 

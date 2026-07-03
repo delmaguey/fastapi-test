@@ -1,9 +1,12 @@
+import logging
 import os
 from pathlib import Path
 from fastapi import UploadFile, File, HTTPException
 from pypdf import PdfReader
 import docx
 from supabase import create_client, Client
+
+logger = logging.getLogger(__name__)
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
@@ -12,6 +15,7 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def extract_text_from_pdf(file_object) -> str:
     """Extracts text from a file-like PDF object."""
+    logger.info("Extracting text from PDF document.")
     text = ""
     try:
         reader = PdfReader(file_object)
