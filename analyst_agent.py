@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import List, Optional, Literal, Any, Dict
 import logging
-import httpx
+from anthropic import APIStatusError, AsyncAnthropic
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
@@ -12,10 +12,10 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Interview Transcript Evaluator")
 
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-5")
-ANTHROPIC_API_URL = os.getenv("ANTHROPIC_API_URL")
 SKILL_FILE = Path(os.getenv("SKILL_FILE", "SKILL.md"))
+
+anthropic_client: Optional[AsyncAnthropic] = None
 
 
 def load_skill_md() -> str:
@@ -86,6 +86,19 @@ SKILL_MD = load_skill_md()
 SYSTEM_PROMPT = build_system_prompt(SKILL_MD)
 
 
+def get_anthropic_client() -> AsyncAnthropic:
+    global anthropic_client
+
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY is not configured")
+
+    if not anthropic_client:
+        anthropic_client = AsyncAnthropic(api_key=api_key)
+
+    return anthropic_client
+
+
 class EvaluationRequest(BaseModel):
     transcript: str = Field(..., min_length=20)
     candidate_name: Optional[str] = None
@@ -120,19 +133,15 @@ class EvaluationResult(BaseModel):
     follow_up_questions: List[str]
 
 
-def extract_text_content(response_json: Dict[str, Any]) -> str:
-    blocks = response_json.get("content", [])
+def extract_text_content(content_blocks: List[Any]) -> str:
     return "\n".join(
-        block.get("text", "")
-        for block in blocks
-        if block.get("type") == "text"
+        block.text
+        for block in content_blocks
+        if getattr(block, "type", None) == "text"
     ).strip()
 
 
 async def call_claude(request: EvaluationRequest) -> Dict[str, Any]:
-    if not ANTHROPIC_API_KEY:
-        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY is not configured")
-
     user_prompt = f"""
 Evaluate the following interview transcript.
 
@@ -151,49 +160,34 @@ Remember:
 - Return JSON only.
 """.strip()
 
-    headers = {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-    }
-
-    payload = {
-        "model": ANTHROPIC_MODEL,
-        "max_tokens": 8000,
-        "temperature": 0,
-        "cache_control": { "type": "ephemeral" },
-        "system": [
-            {
-                "type": "text",
-                "text": SYSTEM_PROMPT
-            }
-        ],
-        "messages": [
-            {"role": "user", "content": user_prompt}
-        ]
-    }
-
-    async with httpx.AsyncClient(timeout=90.0) as client:
-        response = await client.post(ANTHROPIC_API_URL, headers=headers, json=payload)
-
-        
-    if response.status_code >= 400:
-        raise HTTPException(
-            status_code=response.status_code,
-            detail={"message": "Claude API request failed", "response": response.text}
+    try:
+        response = await get_anthropic_client().messages.create(
+            model=os.getenv("ANTHROPIC_MODEL", ANTHROPIC_MODEL),
+            max_tokens=8000,
+            temperature=0,
+            system=[
+                {
+                    "type": "text",
+                    "text": SYSTEM_PROMPT,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
+            messages=[
+                {"role": "user", "content": user_prompt}
+            ],
+            timeout=90.0,
         )
+    except APIStatusError as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail={"message": "Claude API request failed", "response": exc.response.text},
+        ) from exc
 
-    text = extract_clean_json_string(response.json())
+    text = extract_clean_json_string(extract_text_content(response.content))
 
     return json.loads(text)
 
 
-def extract_clean_json_string(text: json) -> str:
-    # Used to extract everything between the ```json and ``` blocks
-    content = text.get("content", [])
-
-    if content and content[0].get("type") == "text":
-        content_text = content[0].get("text")
-
-    match = re.search(r"```json\s*(.*?)\s*```", content_text, re.DOTALL)
-    return match.group(1) if match else content_text.strip()
+def extract_clean_json_string(text: str) -> str:
+    match = re.search(r"```json\s*(.*?)\s*```", text, re.DOTALL)
+    return match.group(1) if match else text.strip()
