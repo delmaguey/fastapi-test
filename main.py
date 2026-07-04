@@ -10,6 +10,7 @@ from azure.storage.blob import BlobServiceClient
 from azure.core.exceptions import ResourceNotFoundError
 import os
 import analyst_agent, text_extractor
+from email_service import ResendEmailService, SendEmailRequest
 
 
 logging.basicConfig(
@@ -133,3 +134,9 @@ async def evaluate_interview(request:analyst_agent.EvaluationRequest):
 async def upload_document(file: UploadFile = File(...)):
     logger.info(f"Received document upload request for file: {file.filename}")
     return await text_extractor.upload_document(file)
+
+
+@app.post("/send-email")
+def send_email(request: SendEmailRequest):
+    logger.info("Received send email request.")
+    return send_email(request)
