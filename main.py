@@ -2,15 +2,18 @@ import io
 import json
 import uuid
 import logging
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from openai import OpenAI
 from dotenv import load_dotenv
 from azure.identity import DefaultAzureCredential
 from azure.storage.blob import BlobServiceClient
 from azure.core.exceptions import ResourceNotFoundError
+from pydantic import BaseModel
 import os
 import analyst_agent, text_extractor
 from email_service import ResendEmailService, SendEmailRequest
+from supabase_client import supabase, get_user_client
 
 
 logging.basicConfig(
@@ -134,6 +137,64 @@ async def evaluate_interview(request:analyst_agent.EvaluationRequest):
 async def upload_document(file: UploadFile = File(...)):
     logger.info(f"Received document upload request for file: {file.filename}")
     return await text_extractor.upload_document(file)
+
+
+bearer_scheme = HTTPBearer()
+
+
+class AuthedUser(BaseModel):
+    id: str
+    access_token: str
+
+
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)) -> AuthedUser:
+    try:
+        user_response = supabase.auth.get_user(credentials.credentials)
+    except Exception as ex:
+        logger.warning(f"Auth token validation failed: {str(ex)}")
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    if not user_response or not user_response.user:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    return AuthedUser(id=user_response.user.id, access_token=credentials.credentials)
+
+
+class NewProcessRequest(BaseModel):
+    name: str
+    company: str
+    location: str
+    sector: str
+    description: str | None = None
+
+
+@app.post("/processes")
+def create_process(request: NewProcessRequest, user: AuthedUser = Depends(get_current_user)):
+    logger.info("Received create process request.")
+
+    try:
+        user_client = get_user_client(user.access_token)
+        response = (
+            user_client.table("processes")
+            .insert(
+                {
+                    "owner_id": user.id,
+                    "name": request.name,
+                    "company": request.company,
+                    "location": request.location,
+                    "sector": request.sector,
+                    "description": request.description,
+                    "status": "active",
+                    "is_disabled": False,
+                }
+            )
+            .execute()
+        )
+        logger.info("Process created successfully.")
+        return response.data[0]
+    except Exception as ex:
+        logger.error(f"Error creating process: {str(ex)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Error creating process")
 
 
 @app.post("/send-email")
